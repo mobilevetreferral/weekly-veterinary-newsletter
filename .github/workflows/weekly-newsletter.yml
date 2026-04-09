@@ -1,0 +1,141 @@
+name: Weekly Veterinary Newsletter
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: Optional source window start date in YYYY-MM-DD
+        required: false
+        type: string
+      end_date:
+        description: Optional issue date / source window end date in YYYY-MM-DD
+        required: false
+        type: string
+      max_articles:
+        description: Maximum number of articles to include
+        required: false
+        default: "6"
+        type: string
+      page_size:
+        description: Number of records to request from Europe PMC
+        required: false
+        default: "25"
+        type: string
+  schedule:
+    - cron: "0 7 * * 1"
+    - cron: "0 8 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-veterinary-newsletter
+  cancel-in-progress: false
+
+jobs:
+  generate-issue:
+    runs-on: ubuntu-latest
+    env:
+      NEWSLETTER_TIMEZONE: ${{ vars.NEWSLETTER_TIMEZONE || 'Europe/London' }}
+      NEWSLETTER_BRAND_NAME: ${{ vars.NEWSLETTER_BRAND_NAME || 'Vet Weekly Digest' }}
+      NEWSLETTER_LOGO_URL: ${{ vars.NEWSLETTER_LOGO_URL || 'https://mobilevetreferral.co.uk/wp-content/uploads/2024/01/mobile-vet-referral-high-resolution-logo-transparent.png' }}
+      NEWSLETTER_LOGO_ALT: ${{ vars.NEWSLETTER_LOGO_ALT || 'Mobile Vet Referral' }}
+      NEWSLETTER_EDITOR_NAME: ${{ vars.NEWSLETTER_EDITOR_NAME || 'Fabrizio Tucciarone' }}
+      NEWSLETTER_CONTACT_NAME: ${{ vars.NEWSLETTER_CONTACT_NAME || 'Fabrizio Tucciarone' }}
+      NEWSLETTER_CONTACT_CREDENTIALS: ${{ vars.NEWSLETTER_CONTACT_CREDENTIALS || 'DVM MRCVS GPcert(SAM) MSc PgCert(Endo) CertAVP' }}
+      NEWSLETTER_CONTACT_COMPANY: ${{ vars.NEWSLETTER_CONTACT_COMPANY || 'Mobile Vet Referral Ltd' }}
+      NEWSLETTER_CONTACT_LOCATION: ${{ vars.NEWSLETTER_CONTACT_LOCATION || 'Northampton' }}
+      NEWSLETTER_CONTACT_PHONE: ${{ vars.NEWSLETTER_CONTACT_PHONE || '07440765031' }}
+      NEWSLETTER_CONTACT_WEBSITE: ${{ vars.NEWSLETTER_CONTACT_WEBSITE || 'https://www.mobilevetreferral.co.uk' }}
+      NEWSLETTER_SITE_URL: ${{ vars.NEWSLETTER_SITE_URL || 'https://www.mobilevetreferral.co.uk' }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Resolve London run context
+        id: context
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          london_date="$(TZ=Europe/London date +%F)"
+          london_day="$(TZ=Europe/London date +%u)"
+          london_hour="$(TZ=Europe/London date +%H)"
+          issue_date="${{ inputs.end_date }}"
+
+          if [ -z "$issue_date" ]; then
+            issue_date="$london_date"
+          fi
+
+          echo "issue_date=$issue_date" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$london_day" = "1" ] && [ "$london_hour" = "08" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Note skipped duplicate schedule
+        if: steps.context.outputs.should_run != 'true'
+        run: |
+          {
+            echo "# Weekly Veterinary Newsletter"
+            echo
+            echo "Skipped this scheduled invocation because the current Europe/London time is not Monday 08:00."
+            echo
+            echo "- GitHub Actions cron is UTC-based, so two Monday cron entries are used to cover BST and GMT."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check out repository
+        if: steps.context.outputs.should_run == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: steps.context.outputs.should_run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Generate issue
+        if: steps.context.outputs.should_run == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=()
+
+          if [ -n "${{ inputs.start_date }}" ]; then
+            args+=(--start-date "${{ inputs.start_date }}")
+          fi
+
+          if [ -n "${{ inputs.end_date }}" ]; then
+            args+=(--end-date "${{ inputs.end_date }}")
+          fi
+
+          if [ -n "${{ inputs.max_articles }}" ]; then
+            args+=(--max-articles "${{ inputs.max_articles }}")
+          fi
+
+          if [ -n "${{ inputs.page_size }}" ]; then
+            args+=(--page-size "${{ inputs.page_size }}")
+          fi
+
+          python3 scripts/newsletter_workflow.py run "${args[@]}"
+
+      - name: Upload issue artifacts
+        if: steps.context.outputs.should_run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-newsletter-${{ steps.context.outputs.issue_date }}
+          path: |
+            data/issue-${{ steps.context.outputs.issue_date }}
+            output/issue-${{ steps.context.outputs.issue_date }}
+          if-no-files-found: error
+
+      - name: Publish GitHub summary
+        if: steps.context.outputs.should_run == 'true'
+        shell: bash
+        run: |
+          python3 scripts/publish_issue_summary.py --issue-date "${{ steps.context.outputs.issue_date }}" >> "$GITHUB_STEP_SUMMARY"
