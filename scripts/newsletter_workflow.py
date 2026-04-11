@@ -263,6 +263,10 @@ def clean_abstract_text(value: str) -> str:
     text = re.sub(r"(?<=[.!?])(?=[A-Z])", " ", text)
     text = re.sub(r"(?<=[A-Za-z])(?=\d)", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\bconstructs-(?=perceived\b)", "constructs: ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bsocial support-and\b", "social support, and", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bc AD\b", "cAD", text)
+    text = re.sub(r"\bp H\b", "pH", text)
     return text
 
 
@@ -314,6 +318,52 @@ def truncate(text: str, max_length: int) -> str:
     return f"{shortened}…"
 
 
+def shorten_long_sentence(text: str, max_length: int) -> str:
+    if len(text) <= max_length:
+        return text
+
+    # Prefer a slightly overlong complete sentence over a clipped one.
+    if len(text) <= max_length + 80:
+        return text
+
+    clauses = re.split(r"(?<=[,;:])\s+", text)
+    kept: list[str] = []
+    for clause in clauses:
+        candidate = " ".join(kept + [clause]) if kept else clause
+        if len(candidate) <= max_length:
+            kept.append(clause)
+        else:
+            break
+
+    if kept:
+        shortened = " ".join(kept).rstrip(",;: ")
+        if shortened and shortened[-1] not in ".!?":
+            shortened += "."
+        return shortened
+
+    return truncate(text, max_length)
+
+
+def limit_complete_sentences(text: str, max_length: int) -> str:
+    sentences = [normalize_sentence(part) for part in sentence_split(text)]
+    sentences = [sentence for sentence in sentences if sentence]
+    if not sentences:
+        return ""
+
+    kept: list[str] = []
+    for sentence in sentences:
+        candidate = " ".join(kept + [sentence]) if kept else sentence
+        if len(candidate) <= max_length:
+            kept.append(sentence)
+        else:
+            break
+
+    if kept:
+        return " ".join(kept)
+
+    return shorten_long_sentence(sentences[0], max_length)
+
+
 def collect_sentences(*texts: str, max_sentences: int, max_chars: int) -> str:
     collected: list[str] = []
     seen: set[str] = set()
@@ -326,13 +376,19 @@ def collect_sentences(*texts: str, max_sentences: int, max_chars: int) -> str:
             key = normalized.lower()
             if key in seen:
                 continue
+            candidate = " ".join(collected + [normalized]) if collected else normalized
+            if collected and len(candidate) > max_chars:
+                return " ".join(collected)
+
+            if not collected and len(candidate) > max_chars:
+                return shorten_long_sentence(normalized, max_chars)
+
             collected.append(normalized)
             seen.add(key)
-            joined = " ".join(collected)
-            if len(collected) >= max_sentences or len(joined) >= max_chars:
-                return truncate(joined, max_chars)
+            if len(collected) >= max_sentences:
+                return " ".join(collected)
 
-    return truncate(" ".join(collected), max_chars)
+    return " ".join(collected)
 
 
 def extract_structured_sections(abstract: str) -> dict[str, str]:
@@ -406,7 +462,7 @@ def fallback_findings(abstract: str) -> str:
     if not sentences:
         return "The abstract was available, but the main findings could not be extracted cleanly."
     preferred = sentences[1:4] if len(sentences) > 2 else sentences[:2]
-    return truncate(" ".join(preferred), 700)
+    return limit_complete_sentences(" ".join(preferred), 700)
 
 
 def compose_technical_summary(article: dict[str, Any], sections: dict[str, str]) -> str:
@@ -433,7 +489,7 @@ def compose_technical_summary(article: dict[str, Any], sections: dict[str, str])
 
     combined = " ".join(part for part in [objective, design, results, conclusion] if part)
     if combined:
-        return truncate(combined, 760)
+        return limit_complete_sentences(combined, 760)
 
     return collect_sentences(article["abstract"], max_sentences=4, max_chars=760)
 
@@ -463,6 +519,23 @@ def compose_key_findings(article: dict[str, Any], sections: dict[str, str]) -> s
 def infer_practical_context(article: dict[str, Any]) -> str:
     text = f"{article['title']} {article['abstract']}".lower()
     rules = [
+        (
+            [
+                "parvovirus",
+                "cpv",
+                "antibody titer",
+                "antibody titers",
+                "titre",
+                "titer",
+                "hemagglutination inhibition",
+                "dot-blot elisa",
+                "blood-donor",
+                "blood donor",
+                "plasma selection",
+                "donor screening",
+            ],
+            "For first-opinion clinicians, this supports more confident use of titre testing, clearer interpretation of vaccination status, and better coordination with referral centres or blood banks when donor screening or plasma selection matters.",
+        ),
         (
             ["zoonotic", "import", "one health", "brucella", "rabies"],
             "For first-opinion vets, the practical consequence is more deliberate travel and import-history taking, earlier infectious-disease screening, and better staff and owner biosecurity communication.",
@@ -540,7 +613,7 @@ def compose_first_opinion_relevance(article: dict[str, Any], sections: dict[str,
     )
     practical = infer_practical_context(article)
     if evidence:
-        return truncate(f"{evidence} {practical}", 700)
+        return limit_complete_sentences(f"{evidence} {practical}", 700)
     return practical
 
 
