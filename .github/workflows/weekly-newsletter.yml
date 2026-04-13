@@ -57,8 +57,8 @@ jobs:
           set -euo pipefail
 
           london_date="$(TZ=Europe/London date +%F)"
-          london_day="$(TZ=Europe/London date +%u)"
-          london_hour="$(TZ=Europe/London date +%H)"
+          london_offset="$(TZ=Europe/London date +%z)"
+          scheduled_cron="${{ github.event.schedule }}"
           issue_date="${{ inputs.end_date }}"
 
           if [ -z "$issue_date" ]; then
@@ -72,7 +72,9 @@ jobs:
             exit 0
           fi
 
-          if [ "$london_day" = "1" ] && [ "$london_hour" = "08" ]; then
+          if [ "$london_offset" = "+0100" ] && [ "$scheduled_cron" = "0 7 * * 1" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          elif [ "$london_offset" = "+0000" ] && [ "$scheduled_cron" = "0 8 * * 1" ]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
           else
             echo "should_run=false" >> "$GITHUB_OUTPUT"
@@ -84,9 +86,10 @@ jobs:
           {
             echo "# Weekly Veterinary Newsletter"
             echo
-            echo "Skipped this scheduled invocation because the current Europe/London time is not Monday 08:00."
+            echo "Skipped this scheduled invocation because it was the duplicate UTC trigger for the current Europe/London offset."
             echo
             echo "- GitHub Actions cron is UTC-based, so two Monday cron entries are used to cover BST and GMT."
+            echo "- Only the BST-aligned trigger in summer and the GMT-aligned trigger in winter should generate the issue."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check out repository
