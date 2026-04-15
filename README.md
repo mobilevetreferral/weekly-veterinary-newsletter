@@ -64,6 +64,7 @@ The launch MVP now includes:
 - [weekly-newsletter.yml](/Users/sarahtucci/Documents/Newsletter automations/.github/workflows/weekly-newsletter.yml) for GitHub Actions scheduling and artifacts
 - [github-actions-setup.md](/Users/sarahtucci/Documents/Newsletter automations/docs/github-actions-setup.md) for repository and workflow setup
 - [mailchimp-launch-checklist.md](/Users/sarahtucci/Documents/Newsletter automations/docs/mailchimp-launch-checklist.md) for audience, consent, and sender setup
+- [mailchimp-weekly-send-playbook.md](/Users/sarahtucci/Documents/Newsletter automations/docs/mailchimp-weekly-send-playbook.md) for the week-by-week campaign build and send steps
 - [monday-review-sop.md](/Users/sarahtucci/Documents/Newsletter automations/docs/monday-review-sop.md) for the weekly review and send process
 - [wordpress-newsletter-page.md](/Users/sarahtucci/Documents/Newsletter automations/docs/wordpress-newsletter-page.md) and [wordpress-newsletter-page.html](/Users/sarahtucci/Documents/Newsletter automations/templates/wordpress-newsletter-page.html) for the WordPress signup page handoff
 

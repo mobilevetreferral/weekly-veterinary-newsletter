@@ -79,28 +79,45 @@ TITLE_KEYWORDS = {
 
 ISSUE_THEMES = [
     (
-        "acute stabilisation and emergency decision-making",
-        ["emergency", "hyperkalemia", "critical care", "icu", "stabil", "arrhythmia"],
+        "client adherence and long-term disease management",
+        ["owner persistence", "adherence", "self-efficacy", "immunotherapy", "asit", "atopic"],
     ),
     (
-        "oncology, prognosis and referral timing",
-        ["oncology", "cancer", "lymphoma", "neoplasia", "survival", "prognosis"],
+        "antimicrobial stewardship and prescribing behaviour",
+        ["antimicrobial", "antibiotic", "prescribing", "stewardship", "acute diarrhea", "acute diarrhoea"],
     ),
     (
-        "dermatology and diagnostic technique",
-        ["dermatology", "dermoscopy", "skin", "alopecia"],
+        "nutrition and preventive urinary care",
+        ["urinary", "urolith", "struvite", "acidifying", "diet", "nutrition"],
     ),
     (
-        "treatment safety and pharmacovigilance",
-        ["antiparasitic", "isoxazoline", "pyrethroid", "neurotoxicity", "pfas"],
+        "orthopaedic recognition and referral timing",
+        ["tendon", "rupture", "orthopaedic", "achilles", "limb", "surgical option"],
+    ),
+    (
+        "practical diagnostics and titre interpretation",
+        [
+            "elisa",
+            "electrophoresis",
+            "titer",
+            "titre",
+            "screening",
+            "diagnostic laboratories",
+            "immunoglobulin",
+            "cytokine",
+        ],
+    ),
+    (
+        "oral medicine and immune dysregulation",
+        ["gingivostomatitis", "stomatitis", "hypergammaglobulinemia", "oral inflammatory", "fcgs"],
+    ),
+    (
+        "oncology, prognosis and emergency triage",
+        ["oncology", "cancer", "lymphoma", "neoplasia", "survival", "prognosis", "icu", "critical care"],
     ),
     (
         "infectious disease surveillance and biosecurity",
         ["zoonotic", "import", "rabies", "brucella", "tick", "one health"],
-    ),
-    (
-        "antimicrobial stewardship",
-        ["antimicrobial", "susceptibility", "resistance", "culture"],
     ),
 ]
 
@@ -125,6 +142,8 @@ STRUCTURED_LABEL_ALIASES = {
     "conclusion and clinical relevance": "conclusion",
     "clinical relevance": "clinical_relevance",
     "clinical significance": "clinical_relevance",
+    "practical relevance": "clinical_relevance",
+    "clinical challenges": "background",
     "limitations": "limitations",
 }
 
@@ -267,6 +286,11 @@ def clean_abstract_text(value: str) -> str:
     text = re.sub(r"\bsocial support-and\b", "social support, and", text, flags=re.IGNORECASE)
     text = re.sub(r"\bc AD\b", "cAD", text)
     text = re.sub(r"\bp H\b", "pH", text)
+    text = re.sub(r"\bFe LV\b", "FeLV", text)
+    text = re.sub(r"\bIg G\b", "IgG", text)
+    text = re.sub(r"\bIg M\b", "IgM", text)
+    text = re.sub(r"\bBehavioral\b", "Behavioural", text)
+    text = re.sub(r"\bbehavioral\b", "behavioural", text)
     return text
 
 
@@ -293,11 +317,10 @@ def sentence_split(text: str) -> list[str]:
 
 
 def strip_structured_label(text: str) -> str:
-    pattern = (
-        r"^(Background|Objective|Aim|Methods|Results|Design|Setting|Animals|Animals and procedure|"
-        r"Interventions|Measurements and main results|Hypothesis/objectives|Conclusion|Conclusions|"
-        r"Conclusion and clinical relevance|Clinical relevance|Limitations):?\s+"
+    labels = "|".join(
+        re.escape(label) for label in sorted(STRUCTURED_LABEL_ALIASES, key=len, reverse=True)
     )
+    pattern = rf"^({labels}):?\s+"
     return re.sub(pattern, "", text, flags=re.IGNORECASE).strip()
 
 
@@ -493,7 +516,6 @@ def compose_technical_summary(article: dict[str, Any], sections: dict[str, str])
 
     return collect_sentences(article["abstract"], max_sentences=4, max_chars=760)
 
-
 def compose_study_design(article: dict[str, Any], sections: dict[str, str]) -> str:
     structured = collect_sentences(
         sections.get("design", ""),
@@ -515,7 +537,6 @@ def compose_key_findings(article: dict[str, Any], sections: dict[str, str]) -> s
     )
     return findings or fallback_findings(article["abstract"])
 
-
 def infer_practical_context(article: dict[str, Any]) -> str:
     text = f"{article['title']} {article['abstract']}".lower()
     rules = [
@@ -523,7 +544,7 @@ def infer_practical_context(article: dict[str, Any]) -> str:
             [
                 "parvovirus",
                 "cpv",
-                "antibody titer",
+                "antibody titre",
                 "antibody titers",
                 "titre",
                 "titer",
@@ -534,7 +555,7 @@ def infer_practical_context(article: dict[str, Any]) -> str:
                 "plasma selection",
                 "donor screening",
             ],
-            "For first-opinion clinicians, this supports more confident use of titre testing, clearer interpretation of vaccination status, and better coordination with referral centres or blood banks when donor screening or plasma selection matters.",
+            "For irst-opinion clinicians, this supports more confident use of titre testing, clearer interpretation of vaccination status, and better coordination with referral centres or blood banks when donor screening or plasma selection matters.",
         ),
         (
             ["zoonotic", "import", "one health", "brucella", "rabies"],
@@ -668,29 +689,56 @@ def join_phrases(phrases: list[str]) -> str:
 
 
 def infer_issue_themes(selected_articles: list[dict[str, Any]]) -> list[str]:
-    text = " ".join(f"{item['title']} {item['abstract']}".lower() for item in selected_articles)
-    scored: list[tuple[int, str]] = []
+    scored: list[tuple[int, int, str]] = []
 
     for label, keywords in ISSUE_THEMES:
-        score = sum(1 for keyword in keywords if keyword in text)
-        if score:
-            scored.append((score, label))
+        article_hits = 0
+        keyword_hits = 0
+        for item in selected_articles:
+            text = f"{item['title']} {item['abstract']}".lower()
+            matches = sum(1 for keyword in keywords if keyword in text)
+            if matches:
+                article_hits += 1
+                keyword_hits += matches
+        if article_hits:
+            scored.append((article_hits, keyword_hits, label))
 
     scored.sort(reverse=True)
-    return [label for _, label in scored[:3]]
+    return [label for _, _, label in scored[:3]]
+
+
+def infer_editorial_close(themes: list[str]) -> str:
+    theme_text = " ".join(themes).lower()
+
+    if any(
+        needle in theme_text
+        for needle in ["diagnostics", "titre", "prescribing", "urinary care", "adherence"]
+    ):
+        return (
+            "Several of these papers are immediately transferable to first-opinion work, particularly when the practical question is whether to test, treat, monitor, or refer."
+        )
+
+    if any(
+        needle in theme_text
+        for needle in ["oncology", "triage", "emergency", "referral timing", "orthopaedic"]
+    ):
+        return (
+            "As a set, they sharpen judgement at the points where escalation, prognosis, and owner counselling matter most."
+        )
+
+    return (
+        "Taken together, they reward the reader who wants not just new information, but sharper clinical judgement around triage, diagnostics, referral timing, and owner communication."
+    )
 
 
 def compose_editorial_note(selected_articles: list[dict[str, Any]]) -> str:
     themes = infer_issue_themes(selected_articles)
     if themes:
-        lead = f"In this week's reading, the main threads are {join_phrases(themes)}."
+        lead = f"This week's issue brings together papers on {join_phrases(themes)}."
     else:
-        lead = "In this week's reading, the selected papers range across several areas of contemporary small-animal practice."
+        lead = "This week's issue ranges across several areas of contemporary small-animal practice."
 
-    close = (
-        "Taken together, they reward the reader who wants not just new information, "
-        "but sharper clinical judgement around triage, diagnostics, referral timing, and owner communication."
-    )
+    close = infer_editorial_close(themes)
     return f"{lead} {close}"
 
 

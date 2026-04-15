@@ -29,6 +29,15 @@ Before publishing, replace:
 - the Mailchimp form placeholder with the real embedded form code
 - the privacy-policy URL placeholder with the live page URL on the site
 
+## Recommended build sequence
+
+1. Create the Mailchimp audience and embedded form first.
+2. Copy the template into a WordPress Custom HTML block or equivalent builder block.
+3. Paste the Mailchimp embed code into the marked signup section.
+4. Replace the privacy-policy placeholder URL.
+5. Preview the page on desktop and mobile.
+6. Submit a test signup and confirm the double opt-in email arrives.
+
 ## Minimum content blocks
 
 - headline
@@ -48,3 +57,15 @@ Keep the signup promise narrow and credible:
 - dogs and cats
 - editorial digest
 - practical relevance for first-opinion practice
+
+## Mailchimp embed settings to keep
+
+When you generate the embedded form in Mailchimp, keep:
+
+- email address visible and required
+- first name visible
+- last name visible
+- audience tag or hidden source field for `website-newsletter`
+- the success / confirmation wording below the form on the WordPress page
+
+Avoid adding too many extra fields at launch. A short form usually converts better.

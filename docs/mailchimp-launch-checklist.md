@@ -72,6 +72,8 @@ Each week:
 5. send test emails
 6. send manually only after approval
 
+Use [mailchimp-weekly-send-playbook.md](/Users/sarahtucci/Documents/Newsletter automations/docs/mailchimp-weekly-send-playbook.md) for the exact campaign-build steps.
+
 ## Deliberate v1 exclusions
 
 Do not configure yet:
